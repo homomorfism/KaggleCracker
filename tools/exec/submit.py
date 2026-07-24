@@ -20,11 +20,12 @@ from core.registry import ToolSpec
 from tools.exec.experiments import _workspace_root
 
 
-# Daily submission cap — UNCONFIRMED pending the S6E7 rules page. Kaggle caps
-# submissions per day and the exact number is competition-specific; until it is
-# confirmed this is the single line to change (same posture as HIGHER_IS_BETTER
-# in experiments.py).
-DAILY_QUOTA = 5
+# CONFIRMED 2026-07-24 against the live competition metadata (Kaggle API,
+# /api/v1/competitions/list, field maxDailySubmissions): S6E7 allows 10
+# submissions per day. This is the number the gate shows the human before one
+# is spent; if Kaggle changes it, this is the single line to update (same
+# posture as HIGHER_IS_BETTER in experiments.py).
+DAILY_QUOTA = 10
 
 
 def _today():
