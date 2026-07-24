@@ -64,7 +64,7 @@ the same in both runs — only what the tool told it differs.
 ## How I tested it
 
 A `FakeModel` harness replays scripted tool calls — no API key, deterministic,
-and it reaches branches a real model would only hit by accident. 81 tests, every
+and it reaches branches a real model would only hit by accident. 91 tests, every
 one routed through the real `dispatch()` path so schema defaults and rejection
 order match production. Coverage includes schema rejection asserting no script
 file was written, one test per error kind with its `retryable` flag, gate approve
@@ -75,9 +75,18 @@ rather than merely refusing to start.
 the `precheck`. So a precheck that raised — the layer I had just added
 specifically to make the system safer — escaped as a raw traceback into the
 transcript, which is exactly the failure requirement 4 exists to prevent. I found
-it while writing the submission precheck, not from a test. The lesson I took: the
-error-handling net has to cover every layer that runs user code, and the layers
-added last are the ones nobody thinks to wrap.
+it while writing the submission precheck, not from a test.
+
+A review of that commit turned up two more of the same shape, and between them
+they sharpened the lesson. `_record()` and `tool_message()` read the envelope
+*outside* the `try`, so a tool returning a bare value crashed the loop instead of
+producing an error branch: the body was guarded, reading its result was not. And
+`validate()`, whose docstring says it never raises, raised on arguments that were
+not a dict, because every line below assumed a mapping. So the net has to cover
+not just the layers that run untrusted code but the layers that read what those
+layers returned — and a promise in a docstring is not a check until something
+enforces it. In all three cases I had reasoned carefully about the dangerous path
+and stopped one line short of it.
 
 ---
 
