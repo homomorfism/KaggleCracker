@@ -1,0 +1,17 @@
+WITHOUT the error branch (naive profile_dataset)
+================================================
+The naive tool force-fits every row to the header and reports confident statistics about rows the file never contained, so the agent writes a confident, wrong preprocessing plan from a file it never actually read.
+
+[MODEL] act  -> profile_dataset({'path': 'ragged.csv', 'checks': ['missingness', 'dtypes']})
+[TOOL OK profile_dataset] {'path': 'ragged.csv', 'rows_profiled': 5, 'columns': ['id', 'amount', 'status'], 'missingness': {'id': {'missing': 0, 'pct': 0.0}, 'amount': {'missing': 3, 'pct': 0.6}, 'status': {'missing': 1, 'pct': 0.2}}, 'dtypes': {'id': {'int': 5, 'float': 0, 'text': 0, 'missing': 0, 'majority': 'int', 'mixed': False}, 'amount': {'int': 0, 'float': 2, 'text': 0, 'missing': 3, 'majority': 'float', 'mixed': False}, 'status': {'int': 0, 'float': 0, 'text': 4, 'missing': 1, 'majority': 'text', 'mixed': False}}}
+[MODEL] act  -> write_preprocessing_plan({'dataset': 'ragged.csv', 'plan_markdown': "# preprocessing plan for ragged.csv\n\n- impute 'amount': 3 missing (60%)\n- impute 'status': 1 missing (20%)\n- rows profiled: 5\n"})
+[TOOL OK write_preprocessing_plan] {'path': 'workspace/plans/ragged.csv.plan.md', 'dataset': 'ragged.csv', 'chars': 126}
+[MODEL] stop -> Preprocessing plan written; recon done.
+
+[FINAL] Preprocessing plan written; recon done.
+[PLAN FILE] workspace/plans/ragged.csv.plan.md:
+  # preprocessing plan for ragged.csv
+  
+  - impute 'amount': 3 missing (60%)
+  - impute 'status': 1 missing (20%)
+  - rows profiled: 5
