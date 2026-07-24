@@ -30,10 +30,10 @@ The class project description says *"pick 2–3 finished competitions and see wh
 
 Kaggle pages are JS-rendered and change without notice, so confirm these by hand and write the answers into this file:
 
-- [ ] **Metric** — exact name and direction (higher/lower better). Write the formula into `core/metrics.py` on day 1.
+- [x] **Metric** — **Balanced Accuracy Score, higher is better** (confirmed 2026-07-24 via Kaggle API `evaluationMetric`). Write the formula into `core/metrics.py` on day 1.
 - [ ] **Target** — column name, type (binary / multiclass / regression), class balance.
-- [ ] **Dates** — start, entry deadline, final submission deadline. Put them in the table in §8.
-- [ ] **Submission quota** — submissions per day. This number goes into the gate's warning message.
+- [x] **Dates** — enabled 2026-07-01, entry/merger deadline and final submission deadline both **2026-07-31 23:59 UTC** (confirmed 2026-07-24 via Kaggle API).
+- [x] **Submission quota** — **10 submissions per day** (confirmed 2026-07-24 via Kaggle API `maxDailySubmissions`). This number goes into the gate's warning message.
 - [ ] **Data size** — MB of `train.csv` / `test.csv`, row and column counts.
 - [ ] **External data rule** — Playground competitions normally allow public external data. Confirm, because Shamil's slice depends on it.
 - [ ] **Original source dataset** — Playground data is synthetic, generated from a real dataset that the overview page usually names. Find it. Training on synthetic + original combined is the single most reliable Playground trick and it is Shamil's first target.
