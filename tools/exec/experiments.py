@@ -17,6 +17,16 @@ from core.contracts import err, ok
 from core.registry import ToolSpec
 
 
+# Metric direction is not yet confirmed — pending the S6E7 Day-0 checklist. Until
+# then we assume higher-is-better; if the confirmed metric is lower-is-better,
+# this is the single line to flip and every best-score comparison follows it.
+HIGHER_IS_BETTER = True
+
+# You cannot score more folds than you ran. cv_folds is capped at this value in
+# the run_experiment schema, so both places read one constant and stay in step.
+_MAX_CV_FOLDS = 20
+
+
 def _workspace_root():
     # Tests point KC_WORKSPACE at a tmp dir (see tests/conftest.py); real runs
     # use ./workspace. Reading it here means no test ever writes into the real
@@ -151,6 +161,21 @@ def run_experiment(args):
     )
 
 
+def _record_precheck(args):
+    """Machine-checkable guard before the ungated write: you cannot have more
+    fold scores than the maximum number of folds an experiment can run. A string
+    comparison rejects an impossible list here rather than filing it into the
+    leaderboard. Returns an error envelope or None."""
+    fold_scores = args["fold_scores"]
+    if len(fold_scores) > _MAX_CV_FOLDS:
+        return err(
+            "bad_input",
+            "fold_scores has %d entries but at most %d folds can be run"
+            % (len(fold_scores), _MAX_CV_FOLDS),
+        )
+    return None
+
+
 def record_experiment_result(args):
     ws = _workspace_root()
     exp_dir = ws / "experiments"
@@ -182,10 +207,12 @@ def record_experiment_result(args):
                 rec = json.loads(line)
                 count += 1
                 s = rec.get("cv_score")
-                # Higher-is-better assumed (AUC/accuracy for this classification
-                # competition). If the confirmed metric is lower-is-better, this
-                # comparison is the one line to flip.
-                if isinstance(s, (int, float)) and (best is None or s > best):
+                # Direction comes from HIGHER_IS_BETTER (see top of file), not a
+                # hardcoded '>'; flipping that one constant flips this comparison.
+                if isinstance(s, (int, float)) and (
+                    best is None
+                    or (s > best if HIGHER_IS_BETTER else s < best)
+                ):
                     best = s
     except OSError as e:
         return err("exec_failed", "could not read leaderboard: %s" % e)
@@ -211,7 +238,7 @@ RUN_EXPERIMENT = ToolSpec(
         # Capped here in the schema (not in the body) so an over-long budget is a
         # bad_input rejection before anything runs.
         "timeout_s": {"type": "int", "min": 1, "max": 1800, "default": 600},
-        "cv_folds": {"type": "int", "min": 2, "max": 20, "default": 5},
+        "cv_folds": {"type": "int", "min": 2, "max": _MAX_CV_FOLDS, "default": 5},
     },
     fn=run_experiment,
     precheck=_run_precheck,
@@ -233,13 +260,15 @@ RECORD_RESULT = ToolSpec(
     ),
     parameters={
         "experiment_id": {"type": "str", "required": True},
-        # A CV score for this competition's classification metric is non-negative;
-        # a negative value is a bug in the experiment, not a result worth keeping.
-        "cv_score": {"type": "float", "required": True, "min": 0.0},
+        # No bound: some competition metrics are legitimately negative (e.g. a
+        # signed or log-loss-style score), so any min risks rejecting a real
+        # value. Impossible fold counts are caught in _record_precheck instead.
+        "cv_score": {"type": "float", "required": True},
         "fold_scores": {"type": "list", "required": True},
         "notes": {"type": "str", "default": ""},
     },
     fn=record_experiment_result,
+    precheck=_record_precheck,
     # No irreversible flag and no preview: this is the reversible half of the
     # pair, so it stays ungated by design.
 )
