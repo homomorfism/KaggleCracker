@@ -1,0 +1,10 @@
+WITH the error branch (real profile_dataset)
+============================================
+The tool refuses the ragged file with bad_input naming line 5, so the loop takes its error branch and the agent writes no plan.
+
+[MODEL] act  -> profile_dataset({'path': 'ragged.csv', 'checks': ['missingness', 'dtypes']})
+[TOOL ERROR profile_dataset] kind=bad_input retryable=False msg=ragged csv: line 5 of ragged.csv has 2 fields but the header has 3; fix the file before profiling it
+[MODEL] stop -> profile_dataset reported failure; NOT writing a plan for a file I could not actually read.
+
+[FINAL] profile_dataset reported failure; NOT writing a plan for a file I could not actually read.
+[PLAN FILE] none written
