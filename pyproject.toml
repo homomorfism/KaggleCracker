@@ -1,0 +1,14 @@
+[project]
+name = "kagglecracker"
+version = "0.1.0"
+description = "Agent that runs ML experiments and submits to Kaggle behind a human approval gate"
+requires-python = ">=3.11"
+# Hard rule from CLAUDE.md: standard library only at runtime. Dependencies stay
+# empty; pytest lives in the dev group below.
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false

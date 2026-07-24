@@ -187,7 +187,9 @@ def test_preview_shows_rows_score_remaining_and_irreversibility(submit_ws):
     preview = shown[0]
     assert "3 data rows" in preview                     # row count
     assert "0.8814" in preview                          # cv_score of the model
-    assert "5 of 5" in preview and "remaining" in preview  # remaining count
+    # Derived from the constant, not hardcoded, so a confirmed-quota change
+    # cannot silently break this assertion.
+    assert "%d of %d" % (DAILY_QUOTA, DAILY_QUOTA) in preview and "remaining" in preview
     assert "cannot be undone" in preview                # the irreversibility line
 
 

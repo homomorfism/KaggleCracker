@@ -17,9 +17,10 @@ from core.contracts import err, ok
 from core.registry import ToolSpec
 
 
-# Metric direction is not yet confirmed — pending the S6E7 Day-0 checklist. Until
-# then we assume higher-is-better; if the confirmed metric is lower-is-better,
-# this is the single line to flip and every best-score comparison follows it.
+# CONFIRMED 2026-07-24 against the live competition metadata (Kaggle API,
+# /api/v1/competitions/list): the S6E7 metric is "Balanced Accuracy Score",
+# which is higher-is-better. If a future episode flips direction, this is the
+# single line to change and every best-score comparison follows it.
 HIGHER_IS_BETTER = True
 
 # You cannot score more folds than you ran. cv_folds is capped at this value in
