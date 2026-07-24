@@ -55,9 +55,17 @@ def dispatch(call, registry, state, input_fn=input, output_fn=print):
         return _record(state, name, verr)
 
     # A deeper, still-mechanical check (e.g. "does this file have the columns we
-    # need"). Runs before the gate for the same reason validate does.
+    # need"). Runs before the gate for the same reason validate does. Wrapped
+    # like the body below: a precheck that raises is a real failure, not data, so
+    # it becomes an exec_failed branch instead of a traceback escaping the loop.
     if spec.precheck is not None:
-        perr = spec.precheck(cleaned)
+        try:
+            perr = spec.precheck(cleaned)
+        except Exception as e:
+            return _record(
+                state, name,
+                err("exec_failed", "%s: %s" % (type(e).__name__, e), retryable=False),
+            )
         if perr is not None:
             return _record(state, name, perr)
 
