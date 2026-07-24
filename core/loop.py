@@ -106,11 +106,19 @@ def tool_message(name, result):
     )
 
 
-# --- hand-written; do not rewrite ------------------------------------------
-# The 15 lines below are the whiteboard-drawable core. The helpers above exist
-# so this stays this short.
-def run_agent(messages, tools, max_steps=12):
+# --- hand-written; keep it whiteboard-short --------------------------------
+# The model is now passed in, not a module global, so a test hands over a
+# FakeModel directly and nothing is patched. Three explicit stopping conditions
+# live here: an external should_stop, the model choosing to emit no tool calls,
+# and the step cap.
+def run_agent(messages, model, registry, max_steps=12, should_stop=None,
+              input_fn=input, output_fn=print):
+    state = RunState()
     for step in range(max_steps):
+        if should_stop is not None and should_stop(state, messages):
+            return None
+
+        tools = registry.schemas(exclude=tuple(state.disabled))
         reply = model(messages, tools)
         messages.append(reply)
 
@@ -118,7 +126,7 @@ def run_agent(messages, tools, max_steps=12):
             return reply.text
 
         for call in reply.tool_calls:
-            result = dispatch(call)
-            messages.append(tool_message(result))
+            result = dispatch(call, registry, state, input_fn, output_fn)
+            messages.append(tool_message(call.name, result))
 
     raise StepLimitReached(messages)
