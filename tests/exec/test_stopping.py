@@ -15,6 +15,7 @@ from core.errors import StepLimitReached
 from core.loop import run_agent
 from core.registry import Registry
 from tests.fakemodel import FakeModel, Reply, ToolCall
+from tools.exec.experiments import RECORD_RESULT
 from tools.exec.stopping import plateau_detector
 
 
@@ -120,4 +121,38 @@ def test_run_agent_stops_on_plateau_before_max_steps(ws):
                     input_fn=_mute, output_fn=_mute)
     assert out is None            # stopped, not a normal text return
     assert model.seen == []       # halted on step 0, before the model was ever consulted
+    assert reasons and "plateau" in reasons[0]
+
+
+def test_run_agent_stops_when_progress_stalls_mid_run(ws):
+    # Start NOT plateaued: an improving pair with too little history to stop, so
+    # the agent must do real work before any plateau can appear. This is the
+    # complement to the test above (which starts pre-plateaued and proves the
+    # agent refuses to even begin): here we prove it stops *during* the work.
+    _seed_leaderboard(ws, [0.80, 0.90])
+
+    reg = Registry()
+    reg.register(RECORD_RESULT)
+
+    # Every reply records another flat 0.90 — steady effort that stops improving.
+    flat = Reply(tool_calls=[ToolCall("record_experiment_result", {
+        "experiment_id": "e", "cv_score": 0.90, "fold_scores": [0.90],
+    })])
+    model = FakeModel([flat for _ in range(6)])
+
+    reasons = []
+    detector = plateau_detector(window=3)
+
+    def recording_should_stop(state, messages):
+        r = detector(state, messages)
+        if r is not None:
+            reasons.append(r)
+        return r
+
+    out = run_agent([], model, reg, max_steps=10, should_stop=recording_should_stop,
+                    input_fn=_mute, output_fn=_mute)
+
+    assert out is None             # stopped on the plateau, not a normal text return
+    assert len(model.seen) >= 2    # the model was consulted (did real work) before stopping
+    assert len(model.seen) < 10    # and it stopped well before the step cap
     assert reasons and "plateau" in reasons[0]
