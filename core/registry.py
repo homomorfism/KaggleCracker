@@ -82,6 +82,15 @@ def validate(spec: ToolSpec, args: dict):
     Returns ``(cleaned_args, None)`` on success, or ``(None, error_envelope)``
     on the first problem. Never raises.
     """
+    # A model can emit anything as its arguments — null, a list, a bare string.
+    # Checked first because every line below assumes a mapping, and iterating a
+    # non-dict would raise out of a function documented never to raise, turning a
+    # malformed call into a crash instead of an ordinary bad_input branch.
+    if not isinstance(args, dict):
+        return None, err(
+            "bad_input", "arguments must be an object, got %s" % type(args).__name__
+        )
+
     params = spec.parameters
 
     # Unknown names are rejected outright rather than ignored: silently dropping

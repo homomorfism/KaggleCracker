@@ -131,6 +131,30 @@ def test_raised_exception_becomes_exec_failed_not_a_traceback():
     assert "kaboom" in result["error"]["msg"]
 
 
+@pytest.mark.parametrize(
+    "returned",
+    [
+        "just a string",                       # a bare value, not an envelope
+        None,                                  # a tool that forgot to return
+        {"data": {"score": 0.9}},              # dict, but no "ok" key
+        {"ok": True},                          # says ok, carries no "data"
+        {"ok": False},                         # says failed, carries no "error"
+    ],
+)
+def test_malformed_tool_return_becomes_exec_failed(returned):
+    # _record() and tool_message() read the envelope outside dispatch's try, so a
+    # tool that returns something else must be converted here. The consequence
+    # that matters: the loop gets a normal error branch it can render, instead of
+    # a KeyError/TypeError killing the run.
+    reg = _reg(_spec("worker", lambda args: returned))
+    state = RunState()
+    result = dispatch(Call("worker", {"x": 1}), reg, state, input_fn=_mute, output_fn=_mute)
+    assert is_err(result, "exec_failed")
+    assert tool_message("worker", result).startswith("[TOOL ERROR worker]")
+    # It counts as a failure like any other, so the disabling bookkeeping applies.
+    assert state.fails["worker"] == 1
+
+
 # --- disabling after two consecutive failures -------------------------------
 
 

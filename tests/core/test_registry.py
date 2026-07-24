@@ -80,6 +80,16 @@ def test_list_item_enum_violation(spec):
     assert is_err(error, "bad_input")
 
 
+@pytest.mark.parametrize("args", [None, ["path", "x"], "path=x", 7])
+def test_non_dict_args_are_rejected_not_raised(spec, args):
+    # A model can emit anything where an arguments object belongs. validate() is
+    # documented never to raise, so each of these has to come back as an ordinary
+    # bad_input envelope the loop can branch on — never a TypeError escaping.
+    cleaned, error = validate(spec, args)
+    assert cleaned is None
+    assert is_err(error, "bad_input")
+
+
 def test_defaults_applied(spec):
     cleaned, error = validate(spec, {"path": "x"})
     assert error is None

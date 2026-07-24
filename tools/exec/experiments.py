@@ -26,6 +26,12 @@ HIGHER_IS_BETTER = True
 # the run_experiment schema, so both places read one constant and stay in step.
 _MAX_CV_FOLDS = 20
 
+# The only parent environment variables an experiment subprocess inherits. PATH
+# so the interpreter can find its tools, HOME because several libraries write
+# caches under it, LANG for text encoding. Everything else — credentials, tokens,
+# PYTHONPATH — is deliberately left behind (see the env build in run_experiment).
+_ENV_ALLOWLIST = ("PATH", "HOME", "LANG")
+
 
 def _workspace_root():
     # Tests point KC_WORKSPACE at a tmp dir (see tests/conftest.py); real runs
@@ -119,7 +125,15 @@ def run_experiment(args):
     # Run confined to workspace/ so the script addresses its data relatively and
     # cannot reach above the sandbox. The dataset and fold count are handed over
     # via the environment so the script does not have to hardcode them.
-    env = dict(os.environ)
+    #
+    # The environment is built from an allowlist rather than copied from
+    # os.environ: this subprocess runs model-written code, and inheriting our
+    # whole environment would hand it every ambient secret this process happens to
+    # hold — Kaggle credentials above all — which it could then print straight
+    # into stdout and from there into the transcript. Only what a Python process
+    # needs to start, plus our own KC_* sandbox settings, crosses the boundary.
+    env = {k: os.environ[k] for k in _ENV_ALLOWLIST if k in os.environ}
+    env.update({k: v for k, v in os.environ.items() if k.startswith("KC_")})
     env["KC_DATASET_REF"] = str(Path("data") / dataset_ref)
     env["KC_CV_FOLDS"] = str(cv_folds)
     try:

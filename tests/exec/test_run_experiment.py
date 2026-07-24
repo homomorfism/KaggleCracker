@@ -112,6 +112,26 @@ def test_good_returns_ok_with_the_parsed_score(workspace):
     assert result["data"]["cv_score"] == 0.8814
 
 
+# --- the subprocess environment is an allowlist, not a copy of ours ---------
+
+
+def test_ambient_secrets_never_reach_the_experiment(workspace, monkeypatch):
+    # A Kaggle credential in our own environment is exactly what model-written
+    # code must not be able to read and print back into the transcript.
+    monkeypatch.setenv("KAGGLE_KEY", "supersecret-do-not-leak")
+
+    result = _run(_fixture("reads_env.py"))
+    assert result["ok"] is True
+    tail = result["data"]["stdout_tail"]
+    # The consequence: the script looked, found nothing, and the secret appears
+    # nowhere in what comes back to the loop.
+    assert "KAGGLE_KEY=<unset>" in tail
+    assert "supersecret-do-not-leak" not in repr(result)
+    # ...and the allowlist is not simply an empty environment: the sandbox
+    # variables the script legitimately needs still arrive.
+    assert "KC_DATASET_REF=data/train.csv" in tail
+
+
 # --- schema rejection: a bad arg stops before the body ----------------------
 
 

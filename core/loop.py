@@ -86,7 +86,26 @@ def dispatch(call, registry, state, input_fn=input, output_fn=print):
         # transcript) so the loop can reason about it like any other error.
         result = err("exec_failed", "%s: %s" % (type(e).__name__, e), retryable=False)
 
+    # _record() and tool_message() index straight into the envelope and both run
+    # outside the try above, so a tool returning a bare value — or a dict missing
+    # the key for its own branch — would crash the loop rather than produce an
+    # error branch. A misbehaving tool joins the same exec_failed path as one that
+    # raised; it is a broken tool either way.
+    if not _is_envelope(result):
+        result = err(
+            "exec_failed",
+            "%s returned a malformed envelope: %r" % (name, result),
+            retryable=False,
+        )
+
     return _record(state, name, result)
+
+
+def _is_envelope(result):
+    """True if ``result`` has the exact shape _record() and tool_message() read."""
+    if not isinstance(result, dict) or "ok" not in result:
+        return False
+    return ("data" if result["ok"] else "error") in result
 
 
 def _record(state, name, result):
