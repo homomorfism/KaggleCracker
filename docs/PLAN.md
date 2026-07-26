@@ -31,14 +31,14 @@ The class project description says *"pick 2–3 finished competitions and see wh
 Kaggle pages are JS-rendered and change without notice, so confirm these by hand and write the answers into this file:
 
 - [x] **Metric** — **Balanced Accuracy Score, higher is better** (confirmed 2026-07-24 via Kaggle API `evaluationMetric`). Write the formula into `core/metrics.py` on day 1.
-- [ ] **Target** — column name, type (binary / multiclass / regression), class balance.
+- [x] **Target** — `health_condition`, 3-class multiclass: `at-risk` 592,561 (85.9%), `unhealthy` 57,724 (8.4%), `fit` 39,803 (5.8%) (confirmed 2026-07-26 from `train.csv`). Heavy imbalance — this is why the metric is Balanced Accuracy; per-class recall matters, plain accuracy would score 0.859 for predicting the majority class.
 - [x] **Dates** — enabled 2026-07-01, entry/merger deadline and final submission deadline both **2026-07-31 23:59 UTC** (confirmed 2026-07-24 via Kaggle API).
 - [x] **Submission quota** — **10 submissions per day** (confirmed 2026-07-24 via Kaggle API `maxDailySubmissions`). This number goes into the gate's warning message.
-- [ ] **Data size** — MB of `train.csv` / `test.csv`, row and column counts.
-- [ ] **External data rule** — Playground competitions normally allow public external data. Confirm, because Shamil's slice depends on it.
-- [ ] **Original source dataset** — Playground data is synthetic, generated from a real dataset that the overview page usually names. Find it. Training on synthetic + original combined is the single most reliable Playground trick and it is Shamil's first target.
-- [ ] **Late submission** — verify it works on the closed regression-fixture episode by uploading its `sample_submission.csv` by hand.
-- [ ] **Kaggle API token** — all three of us have `~/.kaggle/kaggle.json` working. Test with `kaggle competitions list`.
+- [x] **Data size** — `train.csv` 62.7 MB, 690,088 rows × 15 cols; `test.csv` 24.6 MB, 295,753 rows × 14 cols; `sample_submission.csv` 4.4 MB (confirmed 2026-07-26, downloaded to `workspace/data/`).
+- [x] **External data rule** — public external data allowed, standard Playground rules (confirmed 2026-07-26: top-voted public notebooks openly merge the original source dataset; competition rules page is JS-rendered so also eyeball it once by hand before we disclose external data in a submission).
+- [x] **Original source dataset** — [`ziya07/college-student-health-behavior-dataset`](https://www.kaggle.com/datasets/ziya07/college-student-health-behavior-dataset) (confirmed 2026-07-26). 50,000 rows, identical feature columns + `health_condition` target; extra columns `student_id`, `timestamp` (no `id`). Training on synthetic + original combined is the first knowledge-slice target.
+- [x] **Late submission** — verified 2026-07-26 on `playground-series-s6e5` (closed): `sample_submission.csv` submitted late, scored `COMPLETE`, public/private 0.50000, submission id 55007125. Closed-episode late submission works, so S6E5 is usable as the offline regression fixture. Note: the API 403s until the episode's rules are accepted on the website **while logged in as the token's account** — that cost us two false starts, worth a line in a one-pager.
+- [ ] **Kaggle API token** — all three of us have `~/.kaggle/kaggle.json` working. Test with `kaggle competitions list`. *Shamil (`hashshes`) verified 2026-07-26; Nikita and Diganta still need to confirm theirs.*
 
 ---
 
