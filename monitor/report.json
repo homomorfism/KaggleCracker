@@ -1,10 +1,19 @@
 {
-  "generated_at": "2026-07-27T01:51:03+00:00",
+  "generated_at": "2026-07-27T14:19:19+00:00",
   "transcripts_dir": "runs/hw2",
-  "count": 5,
+  "count": 6,
   "graded": [
     {
       "file": "fact_resurfaces.txt",
+      "prompt_adherence": {
+        "verdict": "strictly_adheres"
+      },
+      "task_completion": {
+        "verdict": "completed"
+      }
+    },
+    {
+      "file": "outcomes_recorded.txt",
       "prompt_adherence": {
         "verdict": "strictly_adheres"
       },
