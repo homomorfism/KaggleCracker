@@ -41,7 +41,22 @@ def run_submission(proposal, registry, reviser=None, review=review_submission,
          "rounds":  <revise attempts used>,
          "reviews": [<each critic object, in order>],
          "submit":  <the dispatch envelope, or None if we never submitted>}
+
+    Whatever the terminal status is, it is also recorded as a row in the SHARED
+    submission_outcomes table before this returns. The two agents coordinate
+    through shared memory, which is easy to run and hard to debug — so every
+    decision the pair reaches leaves a queryable row (status + rounds), and the
+    offline monitor can check the table against the transcripts after the fact.
     """
+    result = _drive(proposal, registry, reviser, review, max_rounds,
+                    input_fn, output_fn)
+    relational.record_outcome(
+        proposal["experiment_id"], result["status"], result["rounds"]
+    )
+    return result
+
+
+def _drive(proposal, registry, reviser, review, max_rounds, input_fn, output_fn):
     reviews = []
     rounds = 0
     current = proposal

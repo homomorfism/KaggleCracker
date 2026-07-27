@@ -13,12 +13,21 @@ the store's.
 
 import os
 import sqlite3
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 # The one place the column order lives. SELECT and INSERT both read it so they
 # can never drift apart.
 _COLUMNS = ("id", "user_id", "model_type", "cv_score", "status", "created_at")
+
+# Same discipline for the outcomes table.
+_OUTCOME_COLUMNS = ("id", "experiment_id", "status", "rounds", "created_at")
+
+# The closed set of terminal outcomes the executor can record — the same idea
+# as ERROR_KINDS in core/errors.py: an off-list status is a wiring bug, refused
+# loudly at the point of failure instead of becoming a row nobody can interpret.
+OUTCOME_STATUSES = ("submitted", "denied", "escalated", "gave_up")
 
 
 def _db_path():
@@ -46,6 +55,20 @@ def init_db(path=None):
                 cv_score   REAL,
                 status     TEXT,
                 created_at TEXT
+            )
+            """
+        )
+        # Submission outcomes are structured rows too — a status from a closed
+        # set, a round count, a timestamp — so they belong here beside the
+        # experiments they refer to, not in the free-form document store.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS submission_outcomes (
+                id            TEXT PRIMARY KEY,
+                experiment_id TEXT,
+                status        TEXT,
+                rounds        INTEGER,
+                created_at    TEXT
             )
             """
         )
@@ -103,6 +126,60 @@ def query_experiments(user_id, min_cv=None, model_type=None, path=None):
         "SELECT " + ", ".join(_COLUMNS) + " FROM experiments "
         "WHERE " + " AND ".join(clauses) + " ORDER BY created_at"
     )
+
+    conn = sqlite3.connect(path)
+    try:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows]
+
+
+def record_outcome(experiment_id, status, rounds, created_at=None, path=None):
+    """Insert one terminal submission outcome and return its id.
+
+    This is the durable trace of the executor/critic coordination: every
+    proposal the executor drives to a terminal state leaves exactly one row
+    here, so "what did the agents decide, and after how many rounds?" is a
+    query, not an archaeology dig through prose transcripts. status must come
+    from OUTCOME_STATUSES — an unknown status is refused at the point of
+    failure, mirroring how core/contracts.err refuses an off-list error kind.
+    """
+    if status not in OUTCOME_STATUSES:
+        raise ValueError("unknown outcome status: %r" % (status,))
+    path = path or _db_path()
+    if created_at is None:
+        created_at = datetime.now(timezone.utc).isoformat()
+    outcome_id = uuid.uuid4().hex
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(
+            "INSERT INTO submission_outcomes (id, experiment_id, status, rounds, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (outcome_id, experiment_id, status, rounds, created_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return outcome_id
+
+
+def query_outcomes(experiment_id=None, path=None):
+    """Return outcome rows, oldest first, as a list of dicts.
+
+    With experiment_id given, only that experiment's outcomes. Outcomes are
+    coordination records shared by both agents (and read by the offline
+    monitor), so unlike experiments there is no per-user filter.
+    """
+    path = path or _db_path()
+
+    sql = "SELECT " + ", ".join(_OUTCOME_COLUMNS) + " FROM submission_outcomes"
+    params = []
+    if experiment_id is not None:
+        sql += " WHERE experiment_id = ?"
+        params.append(experiment_id)
+    sql += " ORDER BY created_at"
 
     conn = sqlite3.connect(path)
     try:

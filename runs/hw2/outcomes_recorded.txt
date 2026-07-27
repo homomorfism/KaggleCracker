@@ -1,0 +1,15 @@
+OUTCOMES RECORDED — every terminal decision leaves a shared SQLite row
+========================================================================
+Seeded experiment exp-42 (lightgbm, cv_score=0.88). Same proposal,
+driven to two different terminal states through the executor + critic.
+
+[GATE] scripted human answers 'yes' -> approved dry-run submit
+       executor returned status='submitted' (dry_run held, nothing uploaded)
+[GATE] scripted human answers 'no'  -> denial
+       executor returned status='denied' (denied_by_human)
+
+submission_outcomes table, oldest first (the queryable audit trail):
+  experiment=exp-42 status=submitted rounds=0 at=2026-07-27T14:19:18
+  experiment=exp-42 status=denied    rounds=0 at=2026-07-27T14:19:18
+
+[FINAL] Both terminal decisions are rows in shared memory: the approved dry run and the denial each recorded with their round count, so the offline monitor and both agents read the same record instead of prose.
