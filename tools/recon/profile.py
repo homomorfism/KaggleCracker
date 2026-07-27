@@ -18,6 +18,7 @@ from collections import Counter
 
 from core.contracts import err, ok
 from core.registry import ToolSpec
+from tools.recon import store
 from tools.recon.paths import data_dir
 
 # Tokens treated as a missing value everywhere in this module, compared after
@@ -464,6 +465,13 @@ def profile_dataset(args):
             report[check] = _check_correlation(cols, target)
         elif check == "train_test_drift":
             report[check] = _check_drift(cols, other_cols)
+
+    # The report also lands as rows in the findings table, so later runs (and
+    # other agents) can QUERY what this run learned instead of re-parsing
+    # transcript prose. Replace-per-check semantics live in the store; a
+    # storage failure raises and becomes the loop's exec_failed branch —
+    # never a report that quietly claims to be recorded when it is not.
+    report["findings_recorded"] = store.record_report(args["path"], report, checks)
     return ok(**report)
 
 
@@ -473,7 +481,9 @@ PROFILE_DATASET = ToolSpec(
         "Compute per-column statistics for a CSV under workspace/data and "
         "return a structured report: missingness, dtypes, cardinality, target "
         "balance, numeric summaries, correlation with the target, and train/"
-        "test drift. Call it to understand a dataset BEFORE writing its "
+        "test drift. The report is also recorded as queryable rows in the "
+        "findings table, replacing that dataset's previous rows per check. "
+        "Call it to understand a dataset BEFORE writing its "
         "preprocessing plan. Do NOT call it to clean or transform data — it "
         "only reads. Do NOT re-profile a file with the same checks in one run; "
         "reuse the earlier report from the transcript. Do NOT point it at "

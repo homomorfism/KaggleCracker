@@ -1,6 +1,6 @@
 # Milestone 1 — Nikita — Recon slice
 
-**Graded commit:** [`<fill in after committing>`](https://github.com/homomorfism/KaggleCracker/commit/<hash>) — the dataset-reconnaissance slice of our shared agent, targeting the live Kaggle competition *Playground Series S6E7*.
+**Graded commit:** [`b4ed89f`](https://github.com/homomorfism/KaggleCracker/commit/b4ed89f637ce598920ffb575af65f13200573be7) — the dataset-reconnaissance slice of our shared agent, targeting the live Kaggle competition *Playground Series S6E7*.
 
 ## 1. What I built
 
