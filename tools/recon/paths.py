@@ -29,3 +29,15 @@ def plan_path(dataset):
     # stopping condition and both plan tools all resolve the path through this
     # one function, so "does the plan exist" means the same thing everywhere.
     return plans_dir() / (dataset + ".plan.md")
+
+
+def db_path():
+    # The SQLite domain memory (findings + dataset notes). KC_DB overrides for
+    # tests that want the store somewhere specific; the default hangs off
+    # KC_WORKSPACE so tmp-redirected tests can never touch the real workspace/.
+    # The filename matches the exec slice's experiment store on purpose: one
+    # database file per workspace, each slice owning its own tables.
+    override = os.environ.get("KC_DB")
+    if override:
+        return Path(override)
+    return _workspace_root() / "experiments.db"
