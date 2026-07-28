@@ -4,6 +4,8 @@ import { api, fmtBytes } from '../api'
 import { navigate } from '../hooks'
 
 export default function CreateProject() {
+  const [source, setSource] = useState<'kaggle' | 'manual'>('kaggle')
+  const [url, setUrl] = useState('')
   const [name, setName] = useState('')
   const [target, setTarget] = useState('')
   const [description, setDescription] = useState('')
@@ -31,6 +33,17 @@ export default function CreateProject() {
     e.preventDefault()
     setError(null)
     try {
+      if (source === 'kaggle') {
+        setBusy('creating project — the download continues in the background…')
+        const project = await api.createProject({
+          name,
+          description,
+          target,
+          competition_url: url,
+        })
+        navigate(`/p/${project.slug}/info`)
+        return
+      }
       setBusy('creating project…')
       const project = await api.createProject({ name, description, target })
       for (const file of files) {
@@ -52,13 +65,48 @@ export default function CreateProject() {
       </div>
 
       <form className="form" onSubmit={submit}>
+        <div className="mode-row">
+          <button
+            type="button"
+            className={`btn btn-seg ${source === 'kaggle' ? 'btn-on' : ''}`}
+            onClick={() => setSource('kaggle')}
+          >
+            FROM KAGGLE URL
+          </button>
+          <button
+            type="button"
+            className={`btn btn-seg ${source === 'manual' ? 'btn-on' : ''}`}
+            onClick={() => setSource('manual')}
+          >
+            MANUAL CSV UPLOAD
+          </button>
+        </div>
+
+        {source === 'kaggle' && (
+          <label className="field">
+            <span className="field-label">COMPETITION URL</span>
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://www.kaggle.com/competitions/playground-series-s5e7"
+              autoFocus
+            />
+            <span className="mono-dim field-hint">
+              metadata + train/test data download automatically; the observer and EDA
+              agents start on their own
+            </span>
+          </label>
+        )}
+
         <label className="field">
-          <span className="field-label">PROJECT NAME</span>
+          <span className="field-label">
+            PROJECT NAME {source === 'kaggle' && <em>(optional — defaults to the competition)</em>}
+          </span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Playground S6E7 — Student Health"
-            autoFocus
+            autoFocus={source === 'manual'}
           />
         </label>
 
@@ -81,6 +129,7 @@ export default function CreateProject() {
           />
         </label>
 
+        {source === 'manual' && (
         <div
           className={`dropzone ${dragOver ? 'dropzone-over' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -120,11 +169,15 @@ export default function CreateProject() {
             </ul>
           )}
         </div>
+        )}
 
         {error && <p className="form-error">✗ {error}</p>}
 
         <div className="form-actions">
-          <button className="btn btn-primary" disabled={!name.trim() || busy !== null}>
+          <button
+            className="btn btn-primary"
+            disabled={(source === 'kaggle' ? !url.trim() : !name.trim()) || busy !== null}
+          >
             {busy ?? 'CREATE PROJECT'}
           </button>
         </div>

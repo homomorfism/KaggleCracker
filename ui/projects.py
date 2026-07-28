@@ -32,8 +32,10 @@ def project_dir(slug):
     return projects_root() / slug
 
 
-def create_project(name, description="", target=""):
-    slug = slugify(name)
+def create_project(name, description="", target="", competition=""):
+    # A competition-backed project is named by its Kaggle slug so the project
+    # directory, the API calls, and the UI all agree on one identifier.
+    slug = slugify(competition or name)
     if not _SLUG_RE.match(slug):
         raise ValueError("project name must contain at least one letter or digit")
     d = projects_root() / slug
@@ -43,10 +45,11 @@ def create_project(name, description="", target=""):
     (d / "plans").mkdir()
     (d / "runs").mkdir()
     meta = {
-        "name": name.strip(),
+        "name": (name or competition).strip(),
         "slug": slug,
         "description": description.strip(),
         "target": target.strip(),
+        "competition": competition.strip(),
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     (d / "project.json").write_text(json.dumps(meta, indent=2))
@@ -59,8 +62,10 @@ def get_project(slug):
     if not meta_path.is_file():
         raise FileNotFoundError("no project %r" % slug)
     meta = json.loads(meta_path.read_text())
+    meta.setdefault("competition", "")
     meta["files"] = _data_files(d)
     meta["runs"] = list_runs(slug)
+    meta["setup_state"] = setup_status(slug).get("state", "none")
     return meta
 
 
@@ -93,14 +98,41 @@ def save_data_file(slug, filename, data):
 
 
 def _data_files(d):
+    # Everything in data/ counts: competition bundles carry csv, parquet, json,
+    # images... The csv-only restriction applies to hand uploads, not listing.
     data = d / "data"
     if not data.is_dir():
         return []
     return [
         {"name": p.name, "bytes": p.stat().st_size}
         for p in sorted(data.iterdir())
-        if p.is_file() and p.suffix == ".csv"
+        if p.is_file() and not p.name.startswith(".")
     ]
+
+
+# --- competition setup --------------------------------------------------------
+
+
+def setup_status(slug):
+    """Contents of setup/status.json, or {"state": "none"} before any setup."""
+    path = project_dir(slug) / "setup" / "status.json"
+    if not path.is_file():
+        return {"state": "none"}
+    try:
+        return json.loads(path.read_text())
+    except ValueError:
+        # A torn read mid-replace; the writer is atomic, so this is transient.
+        return {"state": "none"}
+
+
+def competition_meta(slug):
+    d = project_dir(slug)
+    if not (d / "project.json").is_file():
+        raise FileNotFoundError("no project %r" % slug)
+    path = d / "competition.json"
+    if not path.is_file():
+        raise FileNotFoundError("no competition metadata for %r yet" % slug)
+    return json.loads(path.read_text())
 
 
 # --- data preparation: plans + findings --------------------------------------

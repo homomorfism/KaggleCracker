@@ -42,8 +42,6 @@ Every change must keep all four visible and intact:
   live competition are capped per day and cannot be undone.
 - **`core/` is frozen** and shared with two teammates. If a change genuinely
   needs to touch `core/`, STOP and tell me instead of editing it.
-- **Do not add dependencies.** Standard library plus pytest. No pydantic, no
-  frameworks, no `requests` unless I explicitly ask.
 
 ## Style
 

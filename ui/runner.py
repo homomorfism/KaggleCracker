@@ -98,7 +98,7 @@ def _gate_input(writer, answer_fn, scripted):
 
 def run_with_journal(messages, model, registry, writer, max_steps=12,
                      gate_answer_fn=None, gate_scripted=True, should_stop=None,
-                     prompt=None):
+                     prompt=None, max_consecutive_fails=2):
     """run_agent with every observable event mirrored into the journal.
 
     The writer stays open — the caller owns its lifetime. Failures are
@@ -122,6 +122,7 @@ def run_with_journal(messages, model, registry, writer, max_steps=12,
             should_stop=should_stop,
             input_fn=_gate_input(writer, gate_answer_fn, gate_scripted),
             output_fn=_gate_output(writer),
+            max_consecutive_fails=max_consecutive_fails,
         )
     except StepLimitReached:
         journaling.flush(messages)

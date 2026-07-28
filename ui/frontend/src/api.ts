@@ -6,14 +6,124 @@ const BASE = '/api'
 export type FileInfo = { name: string; bytes: number }
 export type RunStatus = 'running' | 'finished' | 'failed'
 export type RunInfo = { run_id: string; status: RunStatus; has_report: boolean }
+export type SetupState =
+  | 'none'
+  | 'pending'
+  | 'fetching_metadata'
+  | 'downloading'
+  | 'extracting'
+  | 'done'
+  | 'failed'
 export type Project = {
   name: string
   slug: string
   description: string
   target: string
+  competition: string
   created: string
+  setup_state: SetupState
   files: FileInfo[]
   runs: RunInfo[]
+}
+
+export type SetupStatus = {
+  state: SetupState
+  ts?: string
+  bytes_done?: number
+  bytes_total?: number
+  files?: string[]
+  error?: { kind: string; msg: string; actionable: string }
+}
+
+export type CompetitionMeta = {
+  slug: string
+  title: string
+  description: string
+  evaluation_metric: string
+  deadline: string
+  category: string
+  reward: string
+  url: string
+  files: FileInfo[]
+}
+
+export type PanelType =
+  | 'histogram'
+  | 'bar'
+  | 'scatter'
+  | 'heatmap'
+  | 'line'
+  | 'table'
+  | 'stat'
+  | 'markdown'
+export type Panel = {
+  id: string
+  type: PanelType
+  title: string
+  commentary?: string
+  data: Record<string, unknown>
+}
+export type Dashboard = { version: number; updated: string; panels: Panel[] }
+export type ChatMessage = { seq: number; role: 'user' | 'assistant'; text: string; ts: string }
+export type EdaState = {
+  unchanged?: boolean
+  version?: number
+  dashboard?: Dashboard
+  chat?: ChatMessage[]
+  agent?: { status: 'running' | 'idle'; run_id: string | null }
+}
+
+export type Technique = {
+  name: string
+  why_it_matters: string
+  code_snippet: string
+  snippet_explanation: string
+}
+export type NotebookRecord = {
+  ref: string
+  url: string
+  title: string
+  author: string
+  votes: number
+  pulled_at: string
+  summary: string
+  models: string[]
+  cv_claim: string
+  lb_claim: string
+  techniques: Technique[]
+}
+export type ObserverState = {
+  status: RunStatus | 'none'
+  notebooks: NotebookRecord[]
+  summary_md: string
+}
+
+export type LeaderboardEntry = {
+  experiment_id: string
+  cv_score: number
+  fold_scores?: number[]
+  notes?: string
+}
+
+export type ExperimentState = 'draft' | 'plan_proposed' | 'finished'
+export type ExperimentMeta = {
+  id: string
+  name: string
+  description: string
+  state: ExperimentState
+  cv_score: number | null
+  result_summary: string
+  created: string
+  updated: string
+  running: boolean
+}
+export type ExperimentDetail = {
+  experiment: ExperimentMeta
+  plan_md: string
+  messages: ChatMessage[]
+  latest_turn: string | null
+  turns: { id: string; status: RunStatus }[]
+  code: { name: string; source: string }[]
 }
 
 // One journal line. `type` decides which optional fields are present — the
@@ -71,8 +181,68 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 export const api = {
   listProjects: () => req<{ projects: Project[] }>('GET', '/projects').then((r) => r.projects),
 
-  createProject: (p: { name: string; description: string; target: string }) =>
-    req<Project>('POST', '/projects', p),
+  createProject: (p: {
+    name: string
+    description: string
+    target: string
+    competition_url?: string
+  }) => req<Project>('POST', '/projects', p),
+
+  competition: (slug: string) => req<CompetitionMeta>('GET', `/projects/${slug}/competition`),
+
+  setupStatus: (slug: string) => req<SetupStatus>('GET', `/projects/${slug}/setup`),
+
+  setupRetry: (slug: string) => req<{ state: string }>('POST', `/projects/${slug}/setup/retry`),
+
+  eda: (slug: string, version = -1) =>
+    req<EdaState>('GET', `/projects/${slug}/eda?version=${version}`),
+
+  edaMessage: (slug: string, text: string) =>
+    req<{ message: ChatMessage }>('POST', `/projects/${slug}/eda/messages`, { text }),
+
+  edaEvents: (slug: string, runId: string, since: number) =>
+    req<EventsPage>('GET', `/projects/${slug}/eda/runs/${runId}/events?since=${since}`),
+
+  observer: (slug: string) => req<ObserverState>('GET', `/projects/${slug}/observer`),
+
+  observerRefresh: (slug: string) =>
+    req<{ status: string }>('POST', `/projects/${slug}/observer/refresh`),
+
+  observerEvents: (slug: string, since: number) =>
+    req<EventsPage & { status: RunStatus | 'none' }>(
+      'GET',
+      `/projects/${slug}/observer/events?since=${since}`,
+    ),
+
+  experiments: (slug: string) =>
+    req<{ experiments: ExperimentMeta[] }>('GET', `/projects/${slug}/experiments`).then(
+      (r) => r.experiments,
+    ),
+
+  createExperiment: (slug: string, prompt: string) =>
+    req<ExperimentMeta>('POST', `/projects/${slug}/experiments`, { prompt }),
+
+  experimentDetail: (slug: string, expId: string) =>
+    req<ExperimentDetail>('GET', `/projects/${slug}/experiments/${expId}`),
+
+  experimentMessage: (slug: string, expId: string, text: string) =>
+    req<{ message: ChatMessage }>('POST', `/projects/${slug}/experiments/${expId}/messages`, {
+      text,
+    }),
+
+  experimentStop: (slug: string, expId: string) =>
+    req<{ stopped: boolean }>('POST', `/projects/${slug}/experiments/${expId}/stop`),
+
+  experimentEvents: (slug: string, expId: string, turn: string, since: number) =>
+    req<EventsPage>(
+      'GET',
+      `/projects/${slug}/experiments/${expId}/runs/${turn}/events?since=${since}`,
+    ),
+
+  leaderboard: (slug: string) =>
+    req<{ entries: LeaderboardEntry[] }>('GET', `/projects/${slug}/leaderboard`).then(
+      (r) => r.entries,
+    ),
 
   getProject: (slug: string) => req<Project>('GET', `/projects/${slug}`),
 
@@ -91,7 +261,7 @@ export const api = {
   startRun: (slug: string, mode: RunMode = 'demo', pace = 0.8) =>
     req<{ run_id: string }>('POST', `/projects/${slug}/runs`, { pace, mode }),
 
-  capabilities: () => req<{ live: boolean }>('GET', '/capabilities'),
+  capabilities: () => req<{ live: boolean; kaggle: boolean }>('GET', '/capabilities'),
 
   gateAnswer: (slug: string, runId: string, answer: string) =>
     req<{ answer: string }>('POST', `/projects/${slug}/runs/${runId}/gate`, { answer }),
