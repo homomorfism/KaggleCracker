@@ -14,6 +14,11 @@ from core.gate import confirm
 from core.registry import validate
 
 
+# A tool that fails this many times in a row stops being offered. Two is enough
+# to catch a genuinely broken tool without giving up after a single fluke.
+_MAX_CONSECUTIVE_FAILS = 2
+
+
 @dataclass
 class RunState:
     # Per-tool count of consecutive failures. A success clears the entry, so a
@@ -22,11 +27,11 @@ class RunState:
     # Tools that have failed too often. run_agent stops offering these by
     # passing the set to registry.schemas(exclude=...).
     disabled: set = field(default_factory=set)
-
-
-# A tool that fails this many times in a row stops being offered. Two is enough
-# to catch a genuinely broken tool without giving up after a single fluke.
-_MAX_CONSECUTIVE_FAILS = 2
+    # How many consecutive failures disable a tool. The default matches the
+    # original constant; coding-heavy runs (the experiment agent iterating on a
+    # training script) raise it, because there consecutive errors are the
+    # normal texture of debugging, not a broken tool.
+    max_fails: int = _MAX_CONSECUTIVE_FAILS
 
 
 def dispatch(call, registry, state, input_fn=input, output_fn=print):
@@ -95,7 +100,7 @@ def _record(state, name, result):
         state.fails.pop(name, None)  # a success wipes the streak
     else:
         state.fails[name] = state.fails.get(name, 0) + 1
-        if state.fails[name] >= _MAX_CONSECUTIVE_FAILS:
+        if state.fails[name] >= state.max_fails:
             state.disabled.add(name)
     return result
 
@@ -120,8 +125,9 @@ def tool_message(name, result):
 # live here: an external should_stop, the model choosing to emit no tool calls,
 # and the step cap.
 def run_agent(messages, model, registry, max_steps=12, should_stop=None,
-              input_fn=input, output_fn=print):
-    state = RunState()
+              input_fn=input, output_fn=print,
+              max_consecutive_fails=_MAX_CONSECUTIVE_FAILS):
+    state = RunState(max_fails=max_consecutive_fails)
     for step in range(max_steps):
         if should_stop is not None and should_stop(state, messages):
             return None
