@@ -6,3 +6,7 @@ workspace/**
 !workspace/.gitkeep
 !workspace/*/
 !workspace/*/.gitkeep
+
+# UI frontend toolchain: dependencies and build output never committed.
+ui/frontend/node_modules/
+ui/frontend/dist/
