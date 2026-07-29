@@ -210,6 +210,81 @@ def findings(slug: str, flagged: str = "1"):
     return {"findings": projects.list_findings(slug, flagged_only=flagged != "0")}
 
 
+# --- data preparation runs ----------------------------------------------------
+
+
+def _prep_running(prep_dir):
+    """Lock held, or spawned moments ago and not yet locked — the same
+    spawn-race guard the EDA agent uses."""
+    if (prep_dir / "lock").is_dir():
+        return True
+    marker = prep_dir / "spawn_pending"
+    try:
+        return time.time() - marker.stat().st_mtime < 60
+    except OSError:
+        return False
+
+
+@app.get("/api/projects/{slug}/prep")
+def prep_status(slug: str, since: int = 0):
+    projects.get_project(slug)
+    prep_dir = projects.project_dir(slug) / "prep"
+    path = prep_dir / "journal.jsonl"
+    if _prep_running(prep_dir):
+        status = "running"
+    elif path.is_file():
+        status = journal.run_status(path)
+    else:
+        status = "none"
+    events = journal.read_events(path, since)
+    manifest = {}
+    manifest_path = prep_dir / "manifest.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except ValueError:
+            pass  # torn read mid-replace; the writer is atomic, transient
+    # The worker's own stdout/stderr, for the interface's raw-logs view.
+    # Usually empty — pandas warnings or a traceback land here when not.
+    log_path = prep_dir / "prep.log"
+    log_tail = ""
+    if log_path.is_file():
+        log_tail = "\n".join(log_path.read_text(errors="replace").splitlines()[-100:])
+    return {
+        "status": status,
+        "events": events,
+        "next_since": events[-1]["seq"] if events else since,
+        "manifest": manifest,
+        "log": log_tail,
+    }
+
+
+@app.post("/api/projects/{slug}/prep/run")
+async def prep_run(slug: str, request: Request):
+    projects.get_project(slug)
+    if not projects.list_plans(slug):
+        raise ValueError("no preprocessing plan yet — run a recon analysis first")
+    prep_dir = projects.project_dir(slug) / "prep"
+    if _prep_running(prep_dir):
+        return JSONResponse(status_code=409, content={"error": "preparation already running"})
+    body = await _json_body(request)
+    pace = min(max(float(body.get("pace", 0.6)), 0.0), 10.0)
+    prep_dir.mkdir(exist_ok=True)
+    (prep_dir / "spawn_pending").touch()
+    _spawn("ui.run_prep", [slug, "--pace", str(pace)], prep_dir / "prep.log")
+    return {"status": "running"}
+
+
+@app.get("/api/projects/{slug}/prep/files/{name}")
+def prep_file(slug: str, name: str):
+    if not projects._FILENAME_RE.match(name or ""):
+        raise ValueError("bad file name: %r" % (name,))
+    path = projects.project_dir(slug) / "prep" / name
+    if not path.is_file():
+        raise FileNotFoundError("no prepared file %r" % name)
+    return FileResponse(path, media_type="text/csv", filename=name)
+
+
 def _eda_running(d):
     """Lock held, or spawned moments ago and not yet locked (see
     ui/experiments.is_running for the reasoning)."""
