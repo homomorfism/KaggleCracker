@@ -145,7 +145,7 @@ def _task(slug, exp_id, project, meta, messages):
     return "\n".join(lines)
 
 
-def run_turn(slug, exp_id, model_id=None, model_factory=None):
+def run_turn(slug, exp_id, model_id=None, model_factory=None, mode="auto"):
     project = projects.get_project(slug)
     project_dir = projects.project_dir(slug)
     exp_dir = experiments.experiment_dir(slug, exp_id)
@@ -158,10 +158,20 @@ def run_turn(slug, exp_id, model_id=None, model_factory=None):
     writer = JournalWriter(turn_dir / "journal.jsonl")
 
     task = _task(slug, exp_id, project, meta, messages)
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
     if model_factory is not None:
         model = model_factory(task)
+    elif mode == "demo" or (mode == "auto" and not api_key):
+        # No key needed: scripted prose, but the training and the score are
+        # real — the demo model reads the sandbox result out of the transcript.
+        from ui.demo_experiment import DemoExperimentModel
+
+        csvs = [f["name"] for f in project["files"] if f["name"].endswith(".csv")]
+        train = next((n for n in csvs if "train" in n.lower()), csvs[0] if csvs else "")
+        model = DemoExperimentModel(
+            meta, messages[-1]["text"], project.get("target") or "", train
+        )
     else:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             writer.write("run_failed", reason="ANTHROPIC_API_KEY is not set")
             writer.close()
@@ -217,6 +227,8 @@ def main(argv=None):
     parser.add_argument("slug")
     parser.add_argument("exp_id")
     parser.add_argument("--model", default=None)
+    # auto: live when ANTHROPIC_API_KEY is set, scripted demo otherwise.
+    parser.add_argument("--mode", choices=("auto", "demo", "live"), default="auto")
     args = parser.parse_args(argv)
 
     exp_dir = experiments.experiment_dir(args.slug, args.exp_id)
@@ -231,7 +243,7 @@ def main(argv=None):
     # Lock claimed: the spawn-pending marker has done its job.
     (exp_dir / "spawn_pending").unlink(missing_ok=True)
     try:
-        run_turn(args.slug, args.exp_id, model_id=args.model)
+        run_turn(args.slug, args.exp_id, model_id=args.model, mode=args.mode)
         return 0
     except (ValueError, RuntimeError) as e:
         print("experiment turn failed: %s" % e)

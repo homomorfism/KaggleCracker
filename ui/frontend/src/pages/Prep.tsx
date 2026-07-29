@@ -1,7 +1,23 @@
-import { useEffect, useState } from 'react'
-import type { Finding, PlanInfo } from '../api'
-import { api } from '../api'
+import { useCallback, useEffect, useState } from 'react'
+import type { Finding, JournalEvent, PlanInfo, PrepState } from '../api'
+import { api, fmtBytes } from '../api'
 import { ReportView } from '../charts'
+
+const PREP_BADGES: Record<string, [string, string]> = {
+  run_started: ['INIT', 'badge-info'],
+  drop: ['DROP', 'badge-amber'],
+  coerce: ['COERCE', 'badge-info'],
+  impute: ['IMPUTE', 'badge-info'],
+  note: ['NOTE', 'badge-gate'],
+  file_written: ['WROTE', 'badge-ok'],
+  run_finished: ['DONE', 'badge-ok'],
+  run_failed: ['FAILED', 'badge-err'],
+}
+
+function prepBadge(e: JournalEvent): [string, string] {
+  const key = e.type === 'step' ? String(e.action) : e.type
+  return PREP_BADGES[key] ?? ['·', 'badge-info']
+}
 
 // One scannable phrase per finding — the store's value JSON differs per
 // check, so each check gets its own short rendering.
@@ -44,6 +60,36 @@ export default function PrepPage({ slug }: { slug: string }) {
   const [findings, setFindings] = useState<Finding[] | null>(null)
   const [showAll, setShowAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [prep, setPrep] = useState<PrepState | null>(null)
+  const [launching, setLaunching] = useState(false)
+  const [prepError, setPrepError] = useState<string | null>(null)
+
+  const refreshPrep = useCallback(
+    () => api.prepStatus(slug).then(setPrep, () => {}),
+    [slug],
+  )
+  useEffect(() => {
+    refreshPrep()
+  }, [refreshPrep])
+  // Poll only while a preparation run is actually working.
+  useEffect(() => {
+    if (prep?.status !== 'running') return
+    const t = window.setTimeout(refreshPrep, 1000)
+    return () => window.clearTimeout(t)
+  }, [prep, refreshPrep])
+
+  const startPrep = async () => {
+    setLaunching(true)
+    setPrepError(null)
+    try {
+      await api.prepRun(slug)
+      await refreshPrep()
+    } catch (e) {
+      setPrepError(String(e instanceof Error ? e.message : e))
+    } finally {
+      setLaunching(false)
+    }
+  }
 
   useEffect(() => {
     api.plans(slug).then(setPlans, (e) => setError(String(e.message ?? e)))
@@ -69,7 +115,7 @@ export default function PrepPage({ slug }: { slug: string }) {
       <div className="page-head">
         <div>
           <h1>Data preparation</h1>
-          <span className="mono-dim">STEP 2 · <a className="mono-dim" href={`#/p/${slug}`}>◂ #{slug}</a></span>
+          <span className="mono-dim"><a className="mono-dim" href={`#/p/${slug}`}>◂ #{slug}</a></span>
         </div>
       </div>
 
@@ -81,12 +127,104 @@ export default function PrepPage({ slug }: { slug: string }) {
       </p>
 
       {nothingYet && (
-        <div className="panel">
+        <div className="panel" style={{ marginBottom: 16 }}>
           <p className="mono-dim">
             nothing here yet — run an analysis first; it records findings and writes the plan
           </p>
         </div>
       )}
+
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="report-head">
+          <h3 className="panel-title">EXECUTE THE PLAN</h3>
+          {prep && prep.status !== 'none' && (
+            <span className="run-meta mono-dim">
+              <span className={`lamp lamp-${prep.status}`} /> {prep.status.toUpperCase()}
+            </span>
+          )}
+        </div>
+        <p className="prose" style={{ marginBottom: 12 }}>
+          Runs the plan's decisions mechanically on every csv: drop identifier and
+          constant columns, coerce mixed columns to numeric, impute missing values
+          from <strong>train</strong> statistics only. Deterministic demo — no model.
+        </p>
+        <button
+          className="btn btn-primary"
+          onClick={startPrep}
+          disabled={launching || prep?.status === 'running' || plans.length === 0}
+        >
+          {prep?.status === 'running'
+            ? 'PREPARING…'
+            : prep?.manifest?.files?.length
+              ? '↻ RE-RUN PREPARATION'
+              : '▶ RUN PREPARATION (DEMO)'}
+        </button>
+        {plans.length === 0 && (
+          <p className="mono-dim" style={{ marginTop: 10 }}>
+            needs a plan first — run a recon analysis
+          </p>
+        )}
+        {prepError && <p className="form-error">✗ {prepError}</p>}
+
+        {prep && prep.events.length > 0 && (
+          <div className="feed feed-compact">
+            {prep.events.map((e) => {
+              const t0 = prep.events[0].ts
+              return (
+                <div key={e.seq} className={`evt evt-${e.type === 'step' ? String(e.action) : e.type}`}>
+                  <span className="evt-t">+{(e.ts - t0).toFixed(1)}s</span>
+                  <span className={`badge ${prepBadge(e)[1]}`}>{prepBadge(e)[0]}</span>
+                  <div className="evt-body">
+                    <p>
+                      {e.type === 'file_written'
+                        ? <><code>{e.name}</code> — {e.rows} rows × {e.columns} columns, from <code>{e.source}</code></>
+                        : (e.text ?? e.reason ?? '')}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+            <details className="rawlog rawlog-feed">
+              <summary>RAW LOGS — prep/journal.jsonl{prep.log ? ' + prep.log' : ''}</summary>
+              <pre className="rawlog-pre">
+                {prep.events.map((e) => JSON.stringify(e)).join('\n')}
+              </pre>
+              {prep.log && (
+                <>
+                  <p className="mono-dim" style={{ margin: '10px 0 4px' }}>prep.log (worker stdout/stderr)</p>
+                  <pre className="rawlog-pre">{prep.log}</pre>
+                </>
+              )}
+            </details>
+          </div>
+        )}
+
+        {(prep?.manifest?.files?.length ?? 0) > 0 && (
+          <div className="table-scroll" style={{ marginTop: 14 }}>
+            <table className="stats">
+              <thead>
+                <tr><th>prepared file</th><th>rows</th><th>columns</th><th>size</th><th></th></tr>
+              </thead>
+              <tbody>
+                {prep!.manifest.files!.map((f) => (
+                  <tr key={f.name}>
+                    <td>{f.name}</td>
+                    <td>{f.rows.toLocaleString()}</td>
+                    <td>{f.columns}</td>
+                    <td>{fmtBytes(f.bytes)}</td>
+                    <td>
+                      <a className="mono-dim" href={`/api/projects/${slug}/prep/files/${f.name}`}>
+                        DOWNLOAD ↓
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      </div>
 
       {!nothingYet && (
         <div className="panel" style={{ marginBottom: 16 }}>

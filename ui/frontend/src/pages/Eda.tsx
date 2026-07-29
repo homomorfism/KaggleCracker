@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { api } from '../api'
 import { useEda } from '../hooks'
 import { PanelCard } from '../panels'
+import ReconSummary from '../ReconSummary'
 
 // While a turn runs, surface the agent's tool activity inside the chat so the
 // wait reads as work, not silence.
@@ -107,6 +108,7 @@ export default function EdaPage({ slug }: { slug: string }) {
             <PanelCard key={p.id} panel={p} />
           ))}
         </div>
+        <ReconSummary slug={slug} />
       </div>
 
       <aside className="chat">
