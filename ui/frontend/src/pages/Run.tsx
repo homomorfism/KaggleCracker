@@ -235,6 +235,14 @@ export default function RunPage({ slug, runId }: { slug: string; runId: string }
               </div>
             </div>
           ))}
+          {events.length > 0 && (
+            <details className="rawlog rawlog-feed">
+              <summary>RAW JOURNAL — runs/{runId}/journal.jsonl</summary>
+              <pre className="rawlog-pre">
+                {events.map((e) => JSON.stringify(e)).join('\n')}
+              </pre>
+            </details>
+          )}
         </div>
 
         <aside className="instruments">

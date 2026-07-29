@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
-import { useHashRoute } from './hooks'
+import { useHashRoute, useProject } from './hooks'
 import Menu from './pages/Menu'
 import CreateProject from './pages/CreateProject'
 import ProjectPage from './pages/Project'
 import PrepPage from './pages/Prep'
 import RunPage from './pages/Run'
-import ProjectShell, { type Section } from './pages/ProjectShell'
+import type { Section } from './pages/ProjectShell'
 import InfoPage from './pages/Info'
 import EdaPage from './pages/Eda'
 import ExperimentsPage from './pages/Experiments'
@@ -36,38 +36,118 @@ function projectView(slug: string, route: string[]): { section: Section; view: R
   return { section: 'info', view: <InfoPage slug={slug} /> }
 }
 
+const SECTIONS: { key: Section; label: string; icon: string }[] = [
+  { key: 'info', label: 'Competition', icon: '◈' },
+  { key: 'eda', label: 'Dataset EDA', icon: '▤' },
+  { key: 'experiments', label: 'Experiments', icon: '◉' },
+  { key: 'discussions', label: 'Discussions', icon: '✎' },
+  { key: 'leaderboard', label: 'Leaderboard', icon: '▲' },
+]
+
+// Recon runs and data prep live under Dataset EDA as tabs, not as their own
+// sidebar group — they are the data-understanding workflow, one place.
+const EDA_SECTIONS: Section[] = ['eda', 'recon', 'prep', 'run']
+
+function EdaTabs({ slug, section }: { slug: string; section: Section }) {
+  const active = section === 'run' ? 'recon' : section
+  const tabs = [
+    { key: 'eda', label: 'DASHBOARD', href: `#/p/${slug}/eda` },
+    { key: 'recon', label: 'RECON RUNS', href: `#/p/${slug}/recon` },
+    { key: 'prep', label: 'DATA PREP', href: `#/p/${slug}/prep` },
+  ]
+  return (
+    <div className="tabbar">
+      {tabs.map((t) => (
+        <a key={t.key} className={`tab ${active === t.key ? 'tab-on' : ''}`} href={t.href}>
+          {t.label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
+function ProjectNav({ slug, section }: { slug: string; section: Section }) {
+  const { project } = useProject(slug)
+  const setup = project?.setup_state ?? 'none'
+  const lamp =
+    setup === 'failed' ? 'failed' : setup === 'done' || setup === 'none' ? 'ok' : 'running'
+
+  return (
+    <>
+      <div className="side-project">
+        <span className={`lamp lamp-${lamp}`} />
+        <div>
+          <div className="side-project-name">{project?.name ?? slug}</div>
+          <div className="mono-dim">#{slug}</div>
+        </div>
+      </div>
+      <div className="side-group">
+        {SECTIONS.map((item) => {
+          const on =
+            section === item.key ||
+            (item.key === 'eda' && EDA_SECTIONS.includes(section))
+          return (
+            <a
+              key={item.key}
+              className={`side-item ${on ? 'side-on' : ''}`}
+              href={`#/p/${slug}/${item.key}`}
+            >
+              <span className="side-icon">{item.icon}</span>
+              {item.label}
+            </a>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
 export default function App() {
   const route = useHashRoute()
 
+  const inProject = route[0] === 'p' && route.length >= 2
+  const slug = inProject ? route[1] : null
+
   let view: ReactNode
+  let section: Section = 'info'
   if (route.length === 0) view = <Menu />
   else if (route[0] === 'new') view = <CreateProject />
-  else if (route[0] === 'p' && route.length >= 2) {
-    const slug = route[1]
-    const { section, view: inner } = projectView(slug, route)
-    view = (
-      <ProjectShell slug={slug} section={section}>
-        {inner}
-      </ProjectShell>
+  else if (slug) {
+    const r = projectView(slug, route)
+    section = r.section
+    view = EDA_SECTIONS.includes(r.section) ? (
+      <>
+        <EdaTabs slug={slug} section={r.section} />
+        {r.view}
+      </>
+    ) : (
+      r.view
     )
   } else view = <Menu />
 
   return (
-    <div className="console">
-      <header className="topbar">
-        <a className="brand" href="#/">
+    <div className="app">
+      <aside className="sidebar">
+        <a className="side-brand" href="#/">
           <span className="brand-mark">▚▞</span>
-          <span className="brand-name">KAGGLECRACKER</span>
-          <span className="brand-sub">COMPETITION WORKBENCH</span>
+          KaggleCracker
         </a>
-        <span className="topbar-status">
-          <span className="lamp lamp-ok" /> LOCAL
-        </span>
-      </header>
-      <main className="stage-area">{view}</main>
-      <footer className="foot">
-        journal-driven · agents on subprocesses · dashboards from files
-      </footer>
+        <div className="side-group">
+          <a className={`side-item ${route.length === 0 ? 'side-on' : ''}`} href="#/">
+            <span className="side-icon">⌂</span>
+            Projects
+          </a>
+          <a className={`side-item ${route[0] === 'new' ? 'side-on' : ''}`} href="#/new">
+            <span className="side-icon">＋</span>
+            New project
+          </a>
+        </div>
+        {slug && <ProjectNav slug={slug} section={section} />}
+        <div className="side-foot">
+          <span className="lamp lamp-ok" /> local · journal-driven
+        </div>
+      </aside>
+      <main className="main">{view}</main>
     </div>
   )
 }

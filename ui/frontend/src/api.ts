@@ -143,10 +143,36 @@ export type JournalEvent = {
   reason?: string
   answer?: string
   scripted?: boolean
+  // prep-run events
+  action?: string
+  name?: string
+  source?: string
+  rows?: number
+  columns?: number
+  bytes?: number
 }
 
 export type EventsPage = { events: JournalEvent[]; status: RunStatus; next_since: number }
 export type RunMode = 'demo' | 'live'
+export type PreparedFile = { name: string; source: string; rows: number; columns: number; bytes: number }
+export type PrepManifest = {
+  created?: string
+  train?: string
+  decisions?: {
+    dropped: { column: string; why: string }[]
+    coerced: string[]
+    imputed: { column: string; fill: unknown }[]
+    drift_notes: string[]
+  }
+  files?: PreparedFile[]
+}
+export type PrepState = {
+  status: RunStatus | 'none'
+  events: JournalEvent[]
+  next_since: number
+  manifest: PrepManifest
+  log: string
+}
 export type PlanInfo = { dataset: string; markdown: string; modified: string }
 export type Finding = {
   dataset: string
@@ -243,6 +269,10 @@ export const api = {
     req<{ entries: LeaderboardEntry[] }>('GET', `/projects/${slug}/leaderboard`).then(
       (r) => r.entries,
     ),
+
+  prepStatus: (slug: string) => req<PrepState>('GET', `/projects/${slug}/prep`),
+
+  prepRun: (slug: string) => req<{ status: string }>('POST', `/projects/${slug}/prep/run`),
 
   getProject: (slug: string) => req<Project>('GET', `/projects/${slug}`),
 

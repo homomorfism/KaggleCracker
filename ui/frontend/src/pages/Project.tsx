@@ -1,92 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { Project, RunMode } from '../api'
+import type { RunMode } from '../api'
 import { api, fmtBytes } from '../api'
 import { navigate, useProject } from '../hooks'
 import { ReportView } from '../charts'
-
-type StageState = 'done' | 'ready' | 'todo' | 'soon'
-
-const STATE_GLYPH: Record<StageState, string> = {
-  done: '✓',
-  ready: '→',
-  todo: '',
-  soon: '',
-}
-
-function Stage({
-  n,
-  name,
-  desc,
-  state,
-  href,
-}: {
-  n: number
-  name: string
-  desc: string
-  state: StageState
-  href?: string
-}) {
-  const body = (
-    <>
-      <span className="stage-n">STEP {n}</span>
-      <span className="stage-name">
-        {name} <em className={`stage-glyph stage-glyph-${state}`}>{STATE_GLYPH[state]}</em>
-      </span>
-      <span className="stage-desc">{desc}</span>
-      {state === 'soon' && <span className="tag stage-tag">SOON</span>}
-    </>
-  )
-  if (href && state !== 'soon')
-    return <a className={`stage stage-${state}`} href={href}>{body}</a>
-  return <div className={`stage stage-${state}`}>{body}</div>
-}
-
-// Where this project is in the pipeline — also the navigation between steps.
-// Training and submission are the teammates' slices, visible so the shape of
-// the whole system reads, marked SOON because this UI cannot drive them yet.
-function Pipeline({ slug, project, planCount }: {
-  slug: string
-  project: Project
-  planCount: number | null
-}) {
-  const finished = project.runs.filter((r) => r.status === 'finished').length
-  const recon: StageState = finished > 0 ? 'done' : 'todo'
-  const prep: StageState = (planCount ?? 0) > 0 ? 'done' : finished > 0 ? 'ready' : 'todo'
-
-  return (
-    <div className="stages">
-      <Stage
-        n={1}
-        name="RECON"
-        state={recon}
-        desc={finished > 0 ? `${finished} finished run${finished > 1 ? 's' : ''}` : 'profile the data'}
-      />
-      <Stage
-        n={2}
-        name="PREPARE"
-        state={prep}
-        href={`#/p/${slug}/prep`}
-        desc={
-          planCount === null
-            ? '…'
-            : planCount > 0
-              ? 'plan written — open'
-              : finished > 0
-                ? 'open when the report is in'
-                : 'needs a recon run first'
-        }
-      />
-      <Stage n={3} name="TRAIN" state="soon" desc="experiments on the plan" />
-      <Stage n={4} name="SUBMIT" state="soon" desc="gated, quota-capped" />
-    </div>
-  )
-}
 
 export default function ProjectPage({ slug }: { slug: string }) {
   const { project, error } = useProject(slug)
   const [mode, setMode] = useState<RunMode>('demo')
   const [liveAvailable, setLiveAvailable] = useState<boolean | null>(null)
-  const [planCount, setPlanCount] = useState<number | null>(null)
   const [report, setReport] = useState<string | null>(null)
   const [reportRun, setReportRun] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
@@ -94,7 +15,6 @@ export default function ProjectPage({ slug }: { slug: string }) {
 
   useEffect(() => {
     api.capabilities().then((c) => setLiveAvailable(c.live), () => setLiveAvailable(false))
-    api.plans(slug).then((p) => setPlanCount(p.length), () => setPlanCount(0))
   }, [slug])
 
   // The recon step's product is the report: show the newest one prominently.
@@ -137,12 +57,10 @@ export default function ProjectPage({ slug }: { slug: string }) {
         <a className="mono-dim" href="#/">◂ ALL PROJECTS</a>
       </div>
 
-      <Pipeline slug={slug} project={project} planCount={planCount} />
-
-      <div className={report ? 'recon-grid' : ''} style={{ marginTop: 16 }}>
+      <div className={report ? 'recon-grid' : ''}>
         <div>
           <div className="panel">
-            <h3 className="panel-title">STEP 1 — RECONNAISSANCE</h3>
+            <h3 className="panel-title">RECONNAISSANCE</h3>
             <p className="prose" style={{ marginBottom: 12 }}>
               {project.target
                 ? <>predicting <code className="target-code">{project.target}</code></>
