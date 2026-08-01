@@ -1,9 +1,0 @@
-WITH the error branch (real run_experiment)
-===========================================
-The tool returns bad_input when no CV_SCORE line is printed, so the loop takes its error branch and the agent refuses to record a score.
-
-[MODEL] act  -> run_experiment({'code': '# Fixture: exits 0 and prints a numbe...', 'dataset_ref': 'train.csv', 'timeout_s': 30, 'cv_folds': 5})
-[TOOL ERROR run_experiment] kind=bad_input retryable=True msg=no 'CV_SCORE: <float>' line in stdout; add a print of the final CV score
-[MODEL] stop -> run_experiment reported failure; NOT recording a score.
-
-[FINAL] run_experiment reported failure; NOT recording a score.

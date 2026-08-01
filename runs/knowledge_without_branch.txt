@@ -1,9 +1,0 @@
-WITHOUT the error branch (naive search_kaggle_discussions)
-==========================================================
-The API answers 429. The naive tool swallows it into an empty list, and the agent concludes with total confidence that no prior public work exists — a conclusion the API never supported.
-
-[MODEL] act  -> search_kaggle_discussions({'competition_slug': 'playground-series-s6e7', 'query': 'winning techniques', 'sort': 'votes', 'max_results': 10})
-[TOOL OK search_kaggle_discussions] {'results': [], 'count': 0, 'note': 'no public work matched this query yet — valid result, not a failure'}
-[MODEL] stop -> No prior public work exists for this competition; starting from scratch and skipping further mining.
-
-[FINAL] No prior public work exists for this competition; starting from scratch and skipping further mining.

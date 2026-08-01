@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block headline %}
+  {% if best %}
+    <div class="score-chip">
+      <span>Best CV ({{ protocol.metric_name }})</span>
+      <strong class="num">{{ "%.5f"|format(best.cv_score) }}</strong>
+    </div>
+  {% endif %}
+  {% if selected and selected.status == "ok" %}
+    <form hx-post="/approve/{{ selected.id }}" hx-target="#approve-result" hx-swap="innerHTML">
+      <button class="btn-primary" type="submit" {% if selected_submission %}disabled{% endif %}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg>
+        {% if selected_submission %}Node {{ selected.id }} already submitted
+        {% else %}Approve node {{ selected.id }} &amp; submit{% endif %}
+      </button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block body %}
+
+{% macro tree_node(entry, selected_id) %}
+<li>
+  <a class="node is-{{ entry.cls }}{% if entry.node.id == selected_id %} current{% endif %}"
+     href="/?node={{ entry.node.id }}#detail"
+     title="{{ entry.node.action }} #{{ entry.node.id }} — {{ entry.node.status }}">
+    <span class="n-name">{{ entry.node.action }} #{{ entry.node.id }}</span>
+    <span class="n-foot">
+      {% if entry.scored %}
+        <span class="n-score num">{{ "%.5f"|format(entry.node.cv_score) }}</span>
+      {% else %}
+        <span class="n-score">{{ entry.node.status }}</span>
+      {% endif %}
+      <i class="dot {{ entry.cls }} n-dot"></i>
+    </span>
+  </a>
+  {% if entry.children %}
+    <ul>{% for c in entry.children %}{{ tree_node(c, selected_id) }}{% endfor %}</ul>
+  {% endif %}
+</li>
+{% endmacro %}
+
+<div class="shell">
+
+  <!-- ---------------- sidebar ---------------- -->
+  <aside class="side">
+    <nav class="nav" aria-label="Sections">
+      <a href="#tree"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7Z"/><path d="M12 12 3 7M12 12l9-5M12 12v10"/></svg>1. Solution tree</a>
+      <a href="#leaderboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>2. Leaderboard</a>
+      <a href="#detail"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/></svg>3. Node detail</a>
+      <a href="#context"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M4 17h16"/></svg>4. Context</a>
+    </nav>
+
+    <div class="panel">
+      <h3>Competition</h3>
+      <div class="strong">{{ settings.competition }}</div>
+      <div class="meta">
+        <dl>
+          <dt>metric</dt><dd>{{ protocol.metric_name }}</dd>
+          <dt>direction</dt><dd>{{ "higher" if protocol.higher_is_better else "lower" }}</dd>
+          <dt>folds</dt><dd>{{ protocol.n_folds }}× {{ protocol.fold_scheme }}</dd>
+          <dt>seed</dt><dd>{{ protocol.seed }}</dd>
+        </dl>
+      </div>
+      {% if protocol.rationale %}
+      <details>
+        <summary>Why this protocol</summary>
+        <p class="hint">{{ protocol.rationale }}</p>
+      </details>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h3>Worker</h3>
+      {% set wdot = "best" if worker.startswith("running") else ("warn" if worker.startswith("stale") else "run") %}
+      <div class="status-line"><i class="dot {{ wdot }}"></i><span class="strong">{{ worker }}</span></div>
+      {% if run %}
+      <div class="meta">
+        <dl>
+          <dt>run</dt><dd>#{{ run["id"] }}</dd>
+          <dt>nodes</dt><dd>{{ run["nodes_done"] }} / {{ run["max_nodes"] }}</dd>
+          <dt>spent</dt><dd>${{ "%.4f"|format(run["usd_spent"]) }}</dd>
+          <dt>budget</dt><dd>${{ "%.2f"|format(run["max_usd"]) }}</dd>
+          {% if run["stop_reason"] %}<dt>stopped</dt><dd>{{ run["stop_reason"] }}</dd>{% endif %}
+        </dl>
+      </div>
+      {% endif %}
+      <p class="hint">One experiment at a time — a second worker fails on the lock.</p>
+    </div>
+  </aside>
+
+  <!-- ---------------- tree + leaderboard ---------------- -->
+  <main>
+    <section class="card" id="tree">
+      <div class="card-head">
+        <h2>1. Solution tree</h2>
+        <div class="toolbar">
+          <button class="tool" id="zoomReset" title="Reset zoom to 100%">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          </button>
+          <button class="tool" id="zoomOut" title="Zoom out">−</button>
+          <button class="tool" id="zoomIn" title="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="dot best"></i>best</span>
+        <span><i class="dot ok"></i>scored</span>
+        <span><i class="dot fail"></i>failed</span>
+        <span><i class="dot infra"></i>infra</span>
+      </div>
+      <div class="card-body">
+        <div class="tree-wrap">
+          {% if tree %}
+          <div class="tree-zoom" id="treeZoom">
+            <ul class="tree">
+              {% for entry in tree %}{{ tree_node(entry, selected.id if selected else none) }}{% endfor %}
+            </ul>
+          </div>
+          {% else %}
+          <p class="empty">No nodes yet.</p>
+          {% endif %}
+        </div>
+        <p class="hint">{{ nodes|length }} node(s) under protocol #{{ protocol.id }}. Nodes scored
+           under a retired protocol are excluded — their scores are not comparable.</p>
+      </div>
+    </section>
+
+    <section class="card" id="leaderboard">
+      <div class="card-head"><h2>2. Leaderboard</h2></div>
+      {% if board %}
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:52px">#</th><th>node</th><th>action</th>
+              <th class="num">cv</th><th class="num">fold std</th><th class="num">fold min</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in board[:12] %}
+            <tr class="{% if loop.first %}leader{% endif %}"
+                {% if selected and r.node.id == selected.id %}aria-selected="true"{% endif %}>
+              <td>{{ loop.index }}{% if loop.first %} 🏆{% endif %}</td>
+              <td><a href="/?node={{ r.node.id }}#detail">node {{ r.node.id }}</a>{% if loop.first %}<span class="tag">Best</span>{% endif %}</td>
+              <td>{{ r.node.action }}</td>
+              <td class="num">{{ "%.5f"|format(r.node.cv_score) }}</td>
+              <td class="num">{{ "%.5f"|format(r.fold_std) }}</td>
+              <td class="num">{{ "%.5f"|format(r.fold_min) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="hint">Fold spread sits beside the mean on purpose. The search takes many draws
+           against one fixed fold split, so the top row is partly the luckiest draw — a
+           lower-variance node one place down is often the better submission.</p>
+      </div>
+      {% else %}
+      <div class="card-body"><p class="empty">No scored nodes yet.</p></div>
+      {% endif %}
+    </section>
+  </main>
+
+  <!-- ---------------- node detail ---------------- -->
+  <section class="col-detail card" id="detail">
+    <div class="card-head">
+      <h2>3. Node detail</h2>
+      {% if nodes %}
+      <select class="select" id="nodeSelect" aria-label="Choose node">
+        {% for n in nodes %}
+        <option value="{{ n.id }}" {% if selected and n.id == selected.id %}selected{% endif %}>#{{ n.id }} · {{ n.action }}{% if n.status != "ok" %} ({{ n.status }}){% endif %}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+    </div>
+    {% if selected %}
+    <div class="card-body">
+      <div class="meta">
+        <dl>
+          <dt>node</dt>
+          <dd>#{{ selected.id }} · {{ selected.action }}{% if selected.parent_id %} from #{{ selected.parent_id }}{% endif %}</dd>
+          <dt>status</dt>
+          <dd><span class="pill {{ status_class.get(selected.status, 'warn') }}">{{ selected.status }}</span></dd>
+          <dt>depth</dt><dd>{{ selected.depth }}</dd>
+          <dt>cost</dt><dd>${{ "%.4f"|format(selected.usd or 0) }}</dd>
+          {# Placeholder — the worker does not record per-node wall time yet. #}
+          <dt>time</dt><dd>00:00</dd>
+          <dt>tokens</dt><dd>{{ selected.tokens_in or 0 }} in / {{ selected.tokens_out or 0 }} out</dd>
+          <dt>prompt</dt><dd>{{ selected.prompt_chars or 0 }} chars</dd>
+        </dl>
+      </div>
+
+      {% if selected.error_text %}
+        <p class="block-label section-gap">Failure</p>
+        <pre class="log err">{{ selected.error_text }}</pre>
+      {% endif %}
+
+      <div class="section-gap">
+        <p class="block-label">Key metrics</p>
+        <div class="metric-grid">
+          <div class="metric"><span>CV score</span><strong class="num">{% if selected.status == "ok" and selected.cv_score is not none %}{{ "%.5f"|format(selected.cv_score) }}{% else %}—{% endif %}</strong></div>
+          <div class="metric"><span>Fold min</span><strong class="num">{% if selected.fold_scores %}{{ "%.5f"|format(selected.fold_scores|min) }}{% else %}—{% endif %}</strong></div>
+          <div class="metric"><span>Fold max</span><strong class="num">{% if selected.fold_scores %}{{ "%.5f"|format(selected.fold_scores|max) }}{% else %}—{% endif %}</strong></div>
+        </div>
+        {% if selected.fold_scores %}
+        <div class="folds">
+          {% for f in selected.fold_scores %}<span class="fold">{{ "%.5f"|format(f) }}</span>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="section-gap">
+        <p class="block-label">train.py</p>
+        <div class="code">
+          <button class="copy" id="copyBtn" title="Copy code">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+          </button>
+          <pre id="codeBlock">{{ selected.code }}</pre>
+        </div>
+      </div>
+
+      {% if stdout_tail %}
+      <details>
+        <summary>Experiment log (last 40 lines)</summary>
+        <pre class="log">{{ stdout_tail }}</pre>
+      </details>
+      {% endif %}
+
+      {% if selected.prompt %}
+        <details>
+          <summary>Assembled prompt ({{ selected.prompt_chars }} chars)</summary>
+          <p class="hint" style="margin:0 0 8px">Exactly what the model saw. Stored rather than
+             reconstructed — <code>tree_summary</code> changes as the tree grows, so a
+             rebuilt prompt would not answer "did it actually see that?"</p>
+          <pre class="doc">{{ selected.prompt }}</pre>
+        </details>
+      {% elif selected.prompt_chars %}
+        <details>
+          <summary>Assembled prompt (not stored)</summary>
+          <p class="hint">{{ selected.prompt_chars }} chars. This node predates prompt
+             storage; only its length was recorded.</p>
+        </details>
+      {% endif %}
+
+      <div id="approve-result">
+        {% if selected_submission %}
+          <div class="notice ok">
+            Submitted {{ selected_submission["submitted_at"] }} — state
+            {{ selected_submission["state"] }}{% if selected_submission["public_score"] %},
+            public score {{ selected_submission["public_score"] }}{% endif %}.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="card-body"><p class="empty">No nodes yet.</p></div>
+    {% endif %}
+  </section>
+
+  <!-- ---------------- context ---------------- -->
+  <section class="col-ctx card" id="context">
+    <div class="card-head"><h2>4. Context</h2></div>
+    <div class="card-body">
+      {% if context_docs %}
+        <div class="tabs" role="tablist" data-tabs="ctx">
+          {% for title, body in context_docs %}
+          <button class="tab" role="tab" aria-selected="{{ "true" if loop.first else "false" }}" data-tab="d{{ loop.index }}">{{ title }}</button>
+          {% endfor %}
+        </div>
+        {% for title, body in context_docs %}
+        <div data-panel="ctx:d{{ loop.index }}" {% if not loop.first %}hidden{% endif %}>
+          <pre class="doc">{{ body }}</pre>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty">No context documents.</p>
+        <p class="hint">Generate with <code>kagglecracker eda</code> and
+           <code>kagglecracker discussions</code>.</p>
+        <p class="hint">Measured 2026-08-01: enabling both made the search significantly worse
+           (mean cv 0.81607 → 0.81000, Welch t = 3.81) at +52% prompt size. Off until they can be
+           shown to pay.</p>
+      {% endif %}
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // Tabs: any [data-tabs=NAME] group toggles the [data-panel="NAME:tab"] panels.
+  document.querySelectorAll("[data-tabs]").forEach(group => {
+    const name = group.dataset.tabs;
+    group.addEventListener("click", ev => {
+      const tab = ev.target.closest(".tab");
+      if (!tab) return;
+      group.querySelectorAll(".tab").forEach(t =>
+        t.setAttribute("aria-selected", String(t === tab)));
+      document.querySelectorAll(`[data-panel^="${name}:"]`).forEach(p =>
+        p.hidden = p.dataset.panel !== `${name}:${tab.dataset.tab}`);
+    });
+  });
+
+  // Tree zoom.
+  const treeZoom = document.getElementById("treeZoom");
+  if (treeZoom) {
+    let zoom = 1;
+    const apply = () => { treeZoom.style.transform = `scale(${zoom})`; };
+    document.getElementById("zoomIn").onclick = () => { zoom = Math.min(1.6, zoom + 0.1); apply(); };
+    document.getElementById("zoomOut").onclick = () => { zoom = Math.max(0.5, zoom - 0.1); apply(); };
+    document.getElementById("zoomReset").onclick = () => { zoom = 1; apply(); };
+  }
+
+  // Node selector navigates — selection is server-rendered.
+  const nodeSelect = document.getElementById("nodeSelect");
+  if (nodeSelect) nodeSelect.addEventListener("change", e => {
+    location.href = `/?node=${e.target.value}#detail`;
+  });
+
+  // Syntax highlight + line numbers, ported from docs/design.html. Runs over
+  // textContent so the server keeps sending plain escaped code.
+  const codeBlock = document.getElementById("codeBlock");
+  const rawCode = codeBlock ? codeBlock.textContent : "";
+  if (codeBlock) {
+    const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+    const PY = /(#[^\n]*)|('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")|\b(import|from|as|def|return|class|for|in|if|elif|else|with|try|except|raise|lambda|not|and|or|while|True|False|None)\b|(\b\d+\.?\d*(?:e-?\d+)?\b)/g;
+    const highlight = line => esc(line).replace(PY, (m, com, str, kw, num) => {
+      if (com) return `<span class="c-com">${com}</span>`;
+      if (str) return `<span class="c-str">${str}</span>`;
+      if (kw)  return `<span class="c-kw">${kw}</span>`;
+      return `<span class="c-num">${num}</span>`;
+    });
+    codeBlock.innerHTML = codeBlock.textContent.split("\n")
+      .map((l, i) => `<span class="ln">${i + 1}</span>${highlight(l)}`).join("\n");
+  }
+
+  // Toast + copy.
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("on"), 2400);
+  }
+  const copyBtn = document.getElementById("copyBtn");
+  if (copyBtn) copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(rawCode);
+      toast("Code copied to clipboard");
+    } catch { toast("Copy is blocked here — select the code and copy manually"); }
+  });
+</script>
+{% endblock %}

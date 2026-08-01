@@ -1,24 +1,55 @@
 [project]
 name = "kagglecracker"
 version = "0.1.0"
-description = "Agent that runs ML experiments and submits to Kaggle behind a human approval gate"
-requires-python = ">=3.13,<3.14"
-# The original assignment ran stdlib-only; the workbench features (FastAPI API,
-# Kaggle downloads, EDA subprocesses) relaxed that rule. core/ still imports
-# nothing outside the stdlib.
+description = "Autonomous Kaggle tabular competition agent: AIDE-style tree search over sandboxed ML solutions"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn>=0.30",
-    "kaggle>=1.6",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "openai>=1.60",
+    "anthropic>=0.42",
     "pandas>=2.2",
-    "numpy>=1.26",
-    "scikit-learn>=1.5",
-    "lightgbm>=4.3",
-    "xgboost>=2.0",
+    "numpy>=2.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "typer>=0.15",
+    "kaggle>=2.2.0",
 ]
 
-[dependency-groups]
-dev = ["pytest>=8", "httpx>=0.27"]
+[project.scripts]
+kagglecracker = "kagglecracker.cli:app"
 
-[tool.uv]
-package = false
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kagglecracker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `eval` fires real LLM calls and costs tokens; `live` needs a running Docker
+# daemon and the built sandbox image. Both are excluded from the default run so
+# the suite stays fast and dependency-free; opt in with `pytest -m eval` /
+# `pytest -m live`.
+addopts = "-m 'not eval and not live'"
+markers = [
+    "eval: live LLM call, costs tokens, opt-in only",
+    "live: touches the real Kaggle API, opt-in only",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
