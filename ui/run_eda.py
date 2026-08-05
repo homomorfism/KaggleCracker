@@ -21,6 +21,7 @@ import sys
 import time
 
 from core.registry import Registry
+from tools.corpus import search as corpus_search
 from tools.eda import dashboard as eda_dashboard
 from tools.exec import shell
 from ui import projects
@@ -163,6 +164,7 @@ def run_eda_turn(slug, model_id=None):
         registry = Registry()
         eda_dashboard.register(registry)
         shell.register(registry)
+        corpus_search.register(registry)
         final = run_with_journal(
             [],
             # 3000 tokens (the recon default) truncates mid-script here: a

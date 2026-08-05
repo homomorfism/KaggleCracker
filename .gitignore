@@ -10,3 +10,5 @@ workspace/**
 # UI frontend toolchain: dependencies and build output never committed.
 ui/frontend/node_modules/
 ui/frontend/dist/
+evals/cache/
+evals/results/*.json
