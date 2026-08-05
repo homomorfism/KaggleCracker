@@ -1,14 +1,30 @@
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.DS_Store
 
-# Agent-writable scratch: contents never committed, directory skeleton kept (PLAN §3).
-workspace/**
-!workspace/.gitkeep
-!workspace/*/
-!workspace/*/.gitkeep
+# Competition data is large and Kaggle-licensed. Never committed.
+data/
 
-# UI frontend toolchain: dependencies and build output never committed.
-ui/frontend/node_modules/
-ui/frontend/dist/
+# Per-node run artifacts: generated code, stdout, submission.csv.
+runs/
+
+# The tree itself. Regenerable, and can get large.
+*.db
+*.db-wal
+*.db-shm
+
+# Feeder output. Regenerable from the Kaggle API.
+context/discussions/
+context/eda_findings.md
+
+.env
+
+# Experiment databases and logs (regenerable; results live in PLAN.md)
+experiments/
+
+# Retrieval eval artifacts (regenerable).
 evals/cache/
 evals/results/*.json

@@ -1,0 +1,32 @@
+# Sandbox dependency set — deliberately a SEPARATE project from the host.
+#
+# The host orchestrates and never trains: it has typer/fastapi/openai/anthropic
+# and no sklearn. This project is the mirror image: everything an agent-written
+# train.py may import, and nothing else. Keeping them as two projects with two
+# locks means neither can quietly acquire the other's dependencies, and a
+# resolution conflict on one side can never force a version compromise on the other.
+#
+# `uv.lock` is what the image installs, so the sandbox is byte-reproducible.
+# Regenerate with:  cd sandbox && uv lock --upgrade
+
+[project]
+name = "kagglecracker-sandbox"
+version = "0.1.0"
+description = "Dependency set for the KaggleCracker execution sandbox. No first-party code."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=2.0",
+    "pandas>=2.2,<3.0",  # pinned below 3.0 — see PLAN.md experiment A
+    "scipy>=1.14",
+    "scikit-learn>=1.5",
+    "lightgbm>=4.5",
+    "xgboost>=2.1",
+    "catboost>=1.2",
+    "polars>=1.9",
+    "pyarrow>=17.0",
+]
+
+# There is no first-party code here — this project exists only to pin a
+# dependency closure. Without this, `uv sync` would try to build a wheel for it.
+[tool.uv]
+package = false

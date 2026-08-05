@@ -1,9 +1,0 @@
-WITH the error branch (real search_kaggle_discussions)
-======================================================
-The API answers 429. The tool returns a rate_limited envelope, the loop takes its error branch, and the agent treats the corpus as unknown instead of empty.
-
-[MODEL] act  -> search_kaggle_discussions({'competition_slug': 'playground-series-s6e7', 'query': 'winning techniques', 'sort': 'votes', 'max_results': 10})
-[TOOL ERROR search_kaggle_discussions] kind=rate_limited retryable=True msg=Kaggle API rate limit (HTTP 429); wait and retry
-[MODEL] stop -> Search was rate-limited; the corpus state is UNKNOWN. Retrying later — NOT concluding that no prior work exists.
-
-[FINAL] Search was rate-limited; the corpus state is UNKNOWN. Retrying later — NOT concluding that no prior work exists.
