@@ -20,6 +20,7 @@ import shutil
 import sys
 
 from core.registry import Registry
+from tools.corpus import search as corpus_search
 from tools.exec import experiments as exec_tools
 from tools.exec import shell
 from tools.experiments import planning
@@ -189,6 +190,7 @@ def run_turn(slug, exp_id, model_id=None, model_factory=None, mode="auto"):
         exec_tools.register(registry)
         planning.register(registry)
         shell.register(registry)
+        corpus_search.register(registry)
         final = run_with_journal(
             [],
             model,
