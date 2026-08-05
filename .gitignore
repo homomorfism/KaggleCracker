@@ -24,3 +24,7 @@ context/eda_findings.md
 
 # Experiment databases and logs (regenerable; results live in PLAN.md)
 experiments/
+
+# Retrieval eval artifacts (regenerable).
+evals/cache/
+evals/results/*.json
